@@ -1,12 +1,13 @@
 from pathlib import Path
 import requests
+import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore, auth
 
 from contextvars import ContextVar
 
-# Each Streamlit script run gets its own authentication context. Never use a
-# process-wide global UID: that could mix users across concurrent sessions.
+                                                                            
+                                                                           
 _AUTH_CONTEXT = ContextVar("field2home_auth_context", default=None)
 
 def set_auth_context(id_token, admin_emails=None):
@@ -48,13 +49,19 @@ def _require_user(allowed_roles=None):
 
 
 def _get_firebase_app():
-    """
-    Return the default Firebase Admin app.
-    Initialize it first if it has not been created yet.
-    """
     try:
         return firebase_admin.get_app()
     except ValueError:
+        pass
+
+    try:
+        service_account_info = st.secrets.get("firebase_service_account")
+    except Exception:
+        service_account_info = None
+
+    if service_account_info:
+        certificate = credentials.Certificate(dict(service_account_info))
+    else:
         project_folder = Path(__file__).resolve().parent.parent
         credentials_path = (
             project_folder / "secrets" / "firebase-service-account.json"
@@ -66,7 +73,8 @@ def _get_firebase_app():
             )
 
         certificate = credentials.Certificate(str(credentials_path))
-        return firebase_admin.initialize_app(certificate)
+
+    return firebase_admin.initialize_app(certificate)
 
 
 def connect_firebase():
@@ -109,8 +117,8 @@ def _auth_request(endpoint, api_key, payload):
 
 
 def register_account(email, password, role, full_name, api_key, verified_phone=None):
-    # Accept either internal role values (delivery_partner) or UI labels
-    # (Delivery Partner), then store one consistent lowercase role value.
+                                                                        
+                                                                         
     role_aliases = {
         "customer": "customer",
         "farmer": "farmer",
@@ -158,8 +166,8 @@ def sign_in_account(email, password, api_key):
         {"email": email.strip(), "password": password, "returnSecureToken": True},
     )
 
-    # Initialize Firebase before verifying the token. The Admin SDK
-    # requires an initialized app for verify_id_token().
+                                                                   
+                                                        
     firebase_app = _get_firebase_app()
     decoded = auth.verify_id_token(result["idToken"], app=firebase_app)
     uid = decoded["uid"]
@@ -231,7 +239,7 @@ def sign_in_with_google_id_token(google_id_token, api_key):
         }
     else:
         profile = profile_snapshot.to_dict() or {}
-        # Preserve an existing role and verification status. Only fill missing identity fields.
+                                                                                               
         updates = {}
         if not profile.get("email") and email:
             updates["email"] = email
@@ -407,13 +415,13 @@ def create_order(customer_uid, customer_name, customer_email, phone,
 
     @firestore.transactional
     def _place_order(transaction):
-        # transaction.get(ref) returns a generator in current firebase-admin
-        # versions. Extract the DocumentSnapshot before checking .exists.
+                                                                            
+                                                                         
         snapshots = [next(transaction.get(ref), None) for ref in product_refs]
         checked_items = []
         total = 0.0
 
-        # Read and validate all stock before writing anything.
+                                                              
         for item, snapshot in zip(items, snapshots):
             if snapshot is None or not snapshot.exists:
                 raise ValueError(f"{item.get('name', 'A product')} is no longer available.")
@@ -434,7 +442,7 @@ def create_order(customer_uid, customer_name, customer_email, phone,
                     f"Available stock: {available_stock}."
                 )
 
-            # Use current database values, not stale values from the browser cart.
+                                                                                  
             checked_item = {
                 "product_id": item["product_id"],
                 "name": product.get("name", "Product"),
@@ -579,9 +587,9 @@ def get_all_orders():
     return orders
 
 
-# =========================================================
-# DELIVERY PARTNER MANAGEMENT
-# =========================================================
+                                                           
+                             
+                                                           
 
 def get_pending_delivery_partners():
     user = _require_user({"admin"})
