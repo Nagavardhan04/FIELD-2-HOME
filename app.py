@@ -825,7 +825,7 @@ elif navigation == "Farmer":
             "Selling Price (₹)", min_value=0.01, value=10.0, step=1.0
         )
         original_price = st.number_input(
-            "Original Price (₹)", min_value=0.01, value=10.0, step=1.0
+            "MRP (₹)", min_value=0.01, value=10.0, step=1.0
         )
         quantity = st.text_input(
             "Product Quantity", placeholder="Example: 1 kg"
