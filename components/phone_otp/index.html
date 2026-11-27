@@ -1,0 +1,388 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            color: #183b2b;
+        }
+
+        .box {
+            border: 1px solid #d5e5d9;
+            border-radius: 12px;
+            padding: 14px;
+            background: #f8fcf9;
+        }
+
+        input {
+            padding: 10px;
+            border: 1px solid #b7c9bd;
+            border-radius: 7px;
+            width: 100%;
+            box-sizing: border-box;
+            margin: 6px 0 10px;
+        }
+
+        button {
+            background: #167442;
+            color: white;
+            border: 0;
+            border-radius: 7px;
+            padding: 10px 14px;
+            cursor: pointer;
+            margin: 4px 0;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        small {
+            color: #53665a;
+        }
+
+        .status {
+            margin-top: 8px;
+            font-size: 14px;
+        }
+
+        .success {
+            color: #087a39;
+        }
+
+        .error {
+            color: #b42318;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="box">
+
+    <b>Phone number verification</b>
+
+    <p>
+        <small>
+            Enter your Indian mobile number.
+            Firebase will send an SMS verification code.
+        </small>
+    </p>
+
+    <label>Mobile number (+91)</label>
+
+    <input
+        id="phone"
+        type="tel"
+        placeholder="9876543210"
+        maxlength="10"
+    >
+
+    <div id="recaptcha-container"></div>
+
+    <button id="send">Send OTP</button>
+
+    <div id="verify-area" style="display:none">
+
+        <label>6-digit OTP</label>
+
+        <input
+            id="code"
+            inputmode="numeric"
+            maxlength="6"
+            placeholder="Enter verification code"
+        >
+
+        <button id="verify">Verify phone number</button>
+
+    </div>
+
+    <div id="status" class="status"></div>
+
+</div>
+
+<script>
+
+// ============================================
+// STREAMLIT COMMUNICATION
+// ============================================
+
+function sendToStreamlit(value) {
+
+    window.parent.postMessage({
+        isStreamlitMessage: true,
+        type: "streamlit:setComponentValue",
+        value: value
+    }, "*");
+
+}
+
+function setFrameHeight() {
+
+    window.parent.postMessage({
+        isStreamlitMessage: true,
+        type: "streamlit:setFrameHeight",
+        height: document.body.scrollHeight + 20
+    }, "*");
+
+}
+
+// ============================================
+// VARIABLES
+// ============================================
+
+let confirmation = null;
+let verifier = null;
+let app = null;
+let initialized = false;
+
+// ============================================
+// STATUS MESSAGE
+// ============================================
+
+function msg(message, type = "") {
+
+    const element = document.getElementById("status");
+
+    element.textContent = message;
+    element.className = "status " + type;
+
+}
+
+// ============================================
+// FIREBASE INITIALIZATION
+// ============================================
+
+function init(config) {
+
+    try {
+
+        if (initialized) {
+            return;
+        }
+
+        if (!config || !config.apiKey) {
+
+            msg(
+                "Firebase Web API key is missing in Streamlit secrets.",
+                "error"
+            );
+
+            return;
+        }
+
+        if (!firebase.apps.length) {
+
+            app = firebase.initializeApp(config);
+
+        } else {
+
+            app = firebase.app();
+
+        }
+
+        firebase.auth().useDeviceLanguage();
+
+        initialized = true;
+
+        msg("Firebase initialized. Enter your mobile number.");
+
+    } catch (error) {
+
+        msg(error.message, "error");
+
+    }
+
+}
+
+// ============================================
+// RECEIVE STREAMLIT ARGUMENTS
+// ============================================
+
+window.addEventListener("message", function(event) {
+
+    const data = event.data || {};
+
+    if (data.type === "streamlit:render") {
+
+        init(data.args && data.args.firebase_config);
+
+        setTimeout(setFrameHeight, 100);
+
+    }
+
+});
+
+// ============================================
+// SEND OTP
+// ============================================
+
+document.getElementById("send").onclick = async function() {
+
+    try {
+
+        const number = document
+            .getElementById("phone")
+            .value
+            .replace(/\D/g, "");
+
+        if (!/^\d{10}$/.test(number)) {
+
+            msg("Enter a valid 10-digit Indian mobile number.", "error");
+
+            return;
+
+        }
+
+        if (!initialized) {
+
+            msg("Firebase is not initialized. Refresh the page.", "error");
+
+            return;
+
+        }
+
+        const sendButton = document.getElementById("send");
+
+        sendButton.disabled = true;
+
+        msg("Preparing phone verification...");
+
+        if (!verifier) {
+
+            verifier = new firebase.auth.RecaptchaVerifier(
+                "recaptcha-container",
+                {
+                    size: "normal"
+                }
+            );
+
+        }
+
+        await verifier.render();
+
+        confirmation = await firebase.auth().signInWithPhoneNumber(
+            "+91" + number,
+            verifier
+        );
+
+        document.getElementById("verify-area").style.display = "block";
+
+        msg("OTP sent successfully. Check your mobile phone.", "success");
+
+        setFrameHeight();
+
+    } catch (error) {
+
+        msg("OTP error: " + error.message, "error");
+
+        if (verifier) {
+
+            try {
+                verifier.clear();
+            } catch (_) {}
+
+            verifier = null;
+
+        }
+
+        document.getElementById("send").disabled = false;
+
+    }
+
+};
+
+// ============================================
+// VERIFY OTP
+// ============================================
+
+document.getElementById("verify").onclick = async function() {
+
+    try {
+
+        if (!confirmation) {
+
+            msg("Please request an OTP first.", "error");
+
+            return;
+
+        }
+
+        const code = document
+            .getElementById("code")
+            .value
+            .trim();
+
+        if (!/^\d{6}$/.test(code)) {
+
+            msg("Enter the 6-digit OTP.", "error");
+
+            return;
+
+        }
+
+        const verifyButton = document.getElementById("verify");
+
+        verifyButton.disabled = true;
+
+        msg("Verifying OTP...");
+
+        const result = await confirmation.confirm(code);
+
+        const phone = result.user.phoneNumber;
+
+        await firebase.auth().signOut();
+
+        msg("Phone number verified successfully.", "success");
+
+        sendToStreamlit({
+
+            verified: true,
+
+            phone: phone,
+
+            verifiedAt: new Date().toISOString()
+
+        });
+
+    } catch (error) {
+
+        msg("Verification error: " + error.message, "error");
+
+        document.getElementById("verify").disabled = false;
+
+    }
+
+};
+
+// ============================================
+// COMPONENT READY
+// IMPORTANT: READY MUST COME BEFORE HEIGHT
+// ============================================
+
+window.parent.postMessage({
+
+    isStreamlitMessage: true,
+
+    type: "streamlit:componentReady",
+
+    apiVersion: 1
+
+}, "*");
+
+// Set height only after componentReady.
+
+setTimeout(setFrameHeight, 100);
+
+</script>
+
+</body>
+</html>

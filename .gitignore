@@ -1,0 +1,30 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.streamlit/secrets.toml
+.env
+.env.*
+*.log
+*serviceAccount*.json
+*service-account*.json
+*firebase-adminsdk*.json
+credentials*.json
+*.pem
+*.key
+*.zip
+*.backup*
+
+# VS Code settings
+.vscode/
+
+# Old backup files and folders
+*_backup*
+*_before_*
+backup_*/
+app_backup*.py
+firebase_service_before_*.py
+
+# Temporary files
+*.tmp
+*.log
